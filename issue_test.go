@@ -9,11 +9,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
-
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/trivago/tgo/tcontainer"
 )
 
@@ -1753,5 +1751,80 @@ func TestIssueService_GetRemoteLinks(t *testing.T) {
 
 	if !(*remoteLinks)[0].Object.Status.Resolved {
 		t.Errorf("First remote link object status should be resolved")
+	}
+}
+
+func TestIssueService_AddRemoteLink(t *testing.T) {
+	setup()
+	defer teardown()
+	testMux.HandleFunc("/rest/api/2/issue/10000/remotelink", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "POST")
+		testRequestURL(t, r, "/rest/api/2/issue/10000/remotelink")
+
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"id": 10000, "self": "https://your-domain.atlassian.net/rest/api/issue/MKY-1/remotelink/10000"}`)
+	})
+	r := &RemoteLink{
+		Application: &RemoteLinkApplication{
+			Name: "My Acme Tracker",
+			Type: "com.acme.tracker",
+		},
+		GlobalID:     "system=http://www.mycompany.com/support&id=1",
+		Relationship: "causes",
+		Object: &RemoteLinkObject{
+			Summary: "Customer support issue",
+			Icon: &RemoteLinkIcon{
+				Url16x16: "http://www.mycompany.com/support/ticket.png",
+				Title:    "Support Ticket",
+			},
+			Title: "TSTSUP-111",
+			URL:   "http://www.mycompany.com/support?id=1",
+			Status: &RemoteLinkStatus{
+				Icon: &RemoteLinkIcon{
+					Url16x16: "http://www.mycompany.com/support/resolved.png",
+					Title:    "Case Closed",
+					Link:     "http://www.mycompany.com/support?id=1&details=closed",
+				},
+				Resolved: true,
+			},
+		},
+	}
+	record, _, err := testClient.Issue.AddRemoteLink("10000", r)
+	if record == nil {
+		t.Error("Expected Record. Record is nil")
+	}
+	if err != nil {
+		t.Errorf("Error given: %s", err)
+	}
+}
+
+func TestTime_MarshalJSON(t *testing.T) {
+	timeFormatParseFrom := "2006-01-02T15:04:05.999Z"
+	testCases := []struct {
+		name      string
+		inputTime string
+		expected  string
+	}{
+		{
+			name:      "test without ms",
+			inputTime: "2020-04-01T01:01:01.000Z",
+			expected:  "\"2020-04-01T01:01:01.000+0000\"",
+		},
+		{
+			name:      "test with ms",
+			inputTime: "2020-04-01T01:01:01.001Z",
+			expected:  "\"2020-04-01T01:01:01.001+0000\"",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			rawTime, _ := time.Parse(timeFormatParseFrom, tt.inputTime)
+			time := Time(rawTime)
+			got, _ := time.MarshalJSON()
+			if string(got) != tt.expected {
+				t.Errorf("Time.MarshalJSON() = %v, want %v", string(got), tt.expected)
+			}
+		})
 	}
 }
